@@ -343,6 +343,9 @@ body::after {
 
 .lt {
     /* logout text */
+    font-size: 12px;
+    color: var(--txt3);
+    
 }
 
 /* ════════════════════════════
