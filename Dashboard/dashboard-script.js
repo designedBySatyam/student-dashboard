@@ -1,1188 +1,446 @@
-// ============================================
-// DATA STORAGE & STATE MANAGEMENT
-// ============================================
+'use strict';
 
-// Check if user is logged in
-const currentUser = localStorage.getItem('userEmail');
+/* ── Auth guard ── */
+if(localStorage.getItem('isLoggedIn')!=='true') window.location.replace('./index.html');
 
-if (!localStorage.getItem('isLoggedIn') || !currentUser) {
-    window.location.href = '../index.html';
-}
+/* ── Utils ── */
+const $=id=>document.getElementById(id);
+const uKey=k=>`${localStorage.getItem('userEmail')||'guest'}_${k}`;
+const load=(k,d=[])=>{ try{ const v=localStorage.getItem(uKey(k)); return v!==null?JSON.parse(v):d; }catch{return d;} };
+const save=(k,v)=>localStorage.setItem(uKey(k),JSON.stringify(v));
+const esc=v=>String(v??'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+const clamp=(v,a,b)=>Math.min(b,Math.max(a,Number(v)||0));
+const today=()=>{ const d=new Date();d.setHours(0,0,0,0);return d.toISOString().slice(0,10); };
+const ago=ts=>{ const s=Math.floor((Date.now()-ts)/1000); if(s<60)return'just now'; if(s<3600)return`${Math.floor(s/60)}m ago`; if(s<86400)return`${Math.floor(s/3600)}h ago`; return`${Math.floor(s/86400)}d ago`; };
+const safeColor=v=>/^#[0-9a-f]{6}$/i.test(v)?v:'#7c3aed';
 
-function userKey(key) {
-    return currentUser + "_" + key;
-}
-
-
-// Initialize data structures
-const data = {
-    subjects: JSON.parse(localStorage.getItem(userKey('subjects'))) || [],
-    todos: JSON.parse(localStorage.getItem(userKey('todos'))) || [],
-    notes: JSON.parse(localStorage.getItem(userKey('notes'))) || [],
-    events: JSON.parse(localStorage.getItem(userKey('events'))) || [],
-    goals: JSON.parse(localStorage.getItem(userKey('goals'))) || [],
-    pomodoroSessions: JSON.parse(localStorage.getItem(userKey('pomodoroSessions'))) || [],
-    studySessions: JSON.parse(localStorage.getItem(userKey('studySessions'))) || [],
-    settings: JSON.parse(localStorage.getItem(userKey('pomodoroSettings'))) || {
-        pomodoro: 25,
-        shortBreak: 5,
-        longBreak: 15,
-        autoStartBreaks: false,
-        soundEnabled: true
-    }
+/* ── Data store ── */
+const D={
+  subjects:load('subjects'),
+  todos:load('todos'),
+  focus:load('focusItems'),
+  notes:load('notes'),
+  events:load('events'),
+  goals:load('goals'),
+  pSessions:load('pomodoroSessions'),
+  sSessions:load('studySessions'),
+  settings:load('pomodoroSettings',{pomodoro:25,shortBreak:5,longBreak:15,autoStartBreaks:false,soundEnabled:true})
 };
 
-
-// Save data to localStorage
-function saveData(key) {
-    localStorage.setItem(userKey(key), JSON.stringify(data[key]));
+/* ── Toast ── */
+const toastEl=$('toast'); let _tt;
+function toast(msg,type='ok'){
+  clearTimeout(_tt);$('toastMsg').textContent=msg;
+  toastEl.className=`toast ${type} show`;
+  _tt=setTimeout(()=>toastEl.classList.remove('show'),3000);
 }
 
+/* ── Modals ── */
+const openM=id=>$(id).classList.add('open');
+const closeM=id=>$(id).classList.remove('open');
+document.querySelectorAll('[data-close]').forEach(b=>b.onclick=()=>closeM(b.dataset.close));
+document.querySelectorAll('.mb').forEach(bd=>bd.onclick=e=>{ if(e.target===bd)closeM(bd.id); });
 
-// ============================================
-// DOM ELEMENTS
-// ============================================
+/* ── Sidebar ── */
+const sidebar=$('sidebar');
+$('sidebarToggle').onclick=()=>{ sidebar.classList.toggle('collapsed'); setTimeout(renderChart,320); };
+$('mobileToggle').onclick=()=>sidebar.classList.toggle('mobile-open');
 
-// Sidebar
-const sidebar = document.getElementById('sidebar');
-const sidebarToggle = document.getElementById('sidebarToggle');
-const mobileToggle = document.getElementById('mobileToggle');
-const navItems = document.querySelectorAll('.nav-item');
-const logoutBtn = document.getElementById('logoutBtn');
-
-// Sections
-const sections = document.querySelectorAll('.section');
-const pageTitle = document.getElementById('pageTitle');
-
-// Theme
-const themeToggle = document.getElementById('themeToggle');
-
-// Modals
-const modals = document.querySelectorAll('.modal');
-const closeModalBtns = document.querySelectorAll('.close-modal');
-
-// ============================================
-// NAVIGATION & SIDEBAR
-// ============================================
-
-// Toggle sidebar
-sidebarToggle?.addEventListener('click', () => {
-    sidebar.classList.toggle('collapsed');
+document.querySelectorAll('.ni[data-s]').forEach(item=>{
+  item.onclick=()=>{
+    document.querySelectorAll('.ni').forEach(n=>n.classList.remove('active'));
+    item.classList.add('active');
+    const s=item.dataset.s;
+    document.querySelectorAll('.section').forEach(x=>x.classList.remove('active'));
+    $(`${s}-section`)?.classList.add('active');
+    $('pageTitle').textContent=item.querySelector('.nl')?.textContent||s;
+    if(window.innerWidth<=768)sidebar.classList.remove('mobile-open');
+    if(s==='calendar')renderCalendar();
+    if(s==='dashboard'){updateDashboard();renderChart();}
+  };
 });
 
-mobileToggle?.addEventListener('click', () => {
-    sidebar.classList.toggle('active');
-});
+$('logoutBtn').onclick=()=>{
+  if(confirm('Sign out?')){ localStorage.removeItem('isLoggedIn'); window.location.href='./index.html'; }
+};
 
-// Navigation
-navItems.forEach(item => {
-    item.addEventListener('click', (e) => {
-        e.preventDefault();
-        
-        // Update active nav item
-        navItems.forEach(nav => nav.classList.remove('active'));
-        item.classList.add('active');
-        
-        // Show corresponding section
-        const sectionName = item.dataset.section;
-        sections.forEach(section => section.classList.remove('active'));
-        document.getElementById(`${sectionName}-section`).classList.add('active');
-        
-        // Update page title
-        pageTitle.textContent = item.querySelector('span').textContent;
-        
-        // Close sidebar on mobile
-        if (window.innerWidth <= 768) {
-            sidebar.classList.remove('active');
-        }
-        
-        // Initialize section-specific features
-        if (sectionName === 'calendar') initCalendar();
-        if (sectionName === 'dashboard') updateDashboard();
-    });
-});
+/* ── Theme ── */
+const SUN=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`;
+const MOON=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
+$('themeToggle').innerHTML=MOON;
+$('themeToggle').onclick=()=>{ renderChart(); };
 
-// Logout
-logoutBtn?.addEventListener('click', () => {
-    if (confirm('Are you sure you want to logout?')) {
-        localStorage.removeItem('isLoggedIn');
-        localStorage.removeItem('userEmail');
-        localStorage.removeItem('userName');
-        window.location.href = '../index.html';
-    }
-});
-
-
-// ============================================
-// THEME TOGGLE
-// ============================================
-
-themeToggle?.addEventListener('click', () => {
-    document.body.classList.toggle('dark-theme');
-    const icon = themeToggle.querySelector('i');
-    icon.classList.toggle('fa-moon');
-    icon.classList.toggle('fa-sun');
-    
-    // Save preference
-    localStorage.setItem('darkTheme', document.body.classList.contains('dark-theme'));
-});
-
-// Load theme preference
-if (localStorage.getItem('darkTheme') === 'true') {
-    document.body.classList.add('dark-theme');
-    const icon = themeToggle?.querySelector('i');
-    if (icon) {
-        icon.classList.remove('fa-moon');
-        icon.classList.add('fa-sun');
-    }
+/* ════════════════════
+   DASHBOARD
+════════════════════ */
+function updateDashboard(){
+  const totalMin=D.sSessions.reduce((a,s)=>a+(Number(s.duration)||0),0);
+  $('totalStudyHours').textContent=`${Math.floor(totalMin/60)}h`;
+  $('completedTasks').textContent=D.todos.filter(t=>t.completed).length;
+  $('goalsAchieved').textContent=D.goals.filter(g=>g.progress===100).length;
+  $('currentStreak').textContent=calcStreak();
+  renderFocus();renderActivity();
 }
 
-// ============================================
-// MODAL MANAGEMENT
-// ============================================
-
-function openModal(modalId) {
-    document.getElementById(modalId).classList.add('active');
+function calcStreak(){
+  if(!D.sSessions.length)return 0;
+  const days=new Set(D.sSessions.map(s=>{ const d=new Date(s.date);d.setHours(0,0,0,0);return d.getTime(); }));
+  const c=new Date();c.setHours(0,0,0,0);
+  if(!days.has(c.getTime()))c.setDate(c.getDate()-1);
+  let n=0; while(days.has(c.getTime())){n++;c.setDate(c.getDate()-1);}
+  return n;
 }
 
-function closeModal(modal) {
-    modal.classList.remove('active');
+function renderActivity(){
+  const items=[];
+  D.sSessions.slice(-3).forEach(s=>items.push({txt:`Studied ${s.subject} for ${s.duration} min`,t:s.date,ico:'📚',bg:'rgba(124,58,237,.15)'}));
+  D.todos.filter(t=>t.completed).slice(-2).forEach(t=>items.push({txt:`Completed: ${t.text}`,t:t.completedAt||Date.now(),ico:'✅',bg:'rgba(16,185,129,.15)'}));
+  items.sort((a,b)=>b.t-a.t);
+  const el=$('activityList');
+  if(!items.length){el.innerHTML=`<div class="empty"><span class="ei2">🕐</span><span class="et2">No recent activity</span></div>`;return;}
+  el.innerHTML=items.slice(0,5).map(a=>`<div class="ai"><div class="ad" style="background:${a.bg}">${a.ico}</div><div class="at2">${esc(a.txt)}</div><span class="ag">${ago(a.t)}</span></div>`).join('');
 }
 
-closeModalBtns.forEach(btn => {
-    btn.addEventListener('click', () => {
-        btn.closest('.modal').classList.remove('active');
-    });
-});
-
-// Close modal on outside click
-modals.forEach(modal => {
-    modal.addEventListener('click', (e) => {
-        if (e.target === modal) {
-            closeModal(modal);
-        }
-    });
-});
-
-// ============================================
-// DASHBOARD
-// ============================================
-
-function updateDashboard() {
-    // Calculate stats
-    const totalStudyTime = data.studySessions.reduce((acc, session) => acc + session.duration, 0);
-    const completedTasks = data.todos.filter(todo => todo.completed).length;
-    const goalsAchieved = data.goals.filter(goal => goal.progress === 100).length;
-    
-    // Update stat cards
-    document.getElementById('totalStudyHours').textContent = `${Math.floor(totalStudyTime / 60)}h`;
-    document.getElementById('completedTasks').textContent = completedTasks;
-    document.getElementById('goalsAchieved').textContent = goalsAchieved;
-    
-    // Calculate streak (simplified)
-    const today = new Date().toDateString();
-    const hasStudiedToday = data.studySessions.some(session => 
-        new Date(session.date).toDateString() === today
-    );
-    document.getElementById('currentStreak').textContent = hasStudiedToday ? '1' : '0';
-    
-    // Update recent activity
-    updateRecentActivity();
+function renderFocus(){
+  const t=today(),items=D.focus.filter(i=>i.dateKey===t).sort((a,b)=>Number(a.completed)-Number(b.completed));
+  const el=$('focusList');
+  if(!items.length){el.innerHTML=`<div class="empty"><span class="ei2">🎯</span><span class="et2">No focus items</span></div>`;return;}
+  el.innerHTML=items.map(i=>`<div class="fi ${i.completed?'done':''}"><input type="checkbox" class="tc" ${i.completed?'checked':''} onchange="toggleFocus(${i.id})"><span class="ft">${esc(i.text)}</span>${i.time?`<span class="ftg">${esc(i.time)}</span>`:''}<button class="db" onclick="delFocus(${i.id})">✕</button></div>`).join('');
 }
 
-function updateRecentActivity() {
-    const activityList = document.getElementById('activityList');
-    const recentActivities = [];
-    
-    // Get recent study sessions
-    data.studySessions.slice(-3).forEach(session => {
-        recentActivities.push({
-            type: 'study',
-            text: `Studied ${session.subject} for ${session.duration} minutes`,
-            time: session.date,
-            icon: 'fa-book',
-            color: '#667eea'
-        });
-    });
-    
-    // Get recent completed tasks
-    data.todos.filter(todo => todo.completed).slice(-2).forEach(todo => {
-        recentActivities.push({
-            type: 'task',
-            text: `Completed: ${todo.text}`,
-            time: todo.completedAt || Date.now(),
-            icon: 'fa-check-circle',
-            color: '#10b981'
-        });
-    });
-    
-    if (recentActivities.length === 0) {
-        activityList.innerHTML = `
-            <div class="empty-state">
-                <i class="fas fa-history"></i>
-                <p>No recent activity</p>
-            </div>
-        `;
-        return;
-    }
-    
-    // Sort by time
-    recentActivities.sort((a, b) => b.time - a.time);
-    
-    activityList.innerHTML = recentActivities.slice(0, 5).map(activity => `
-        <div class="activity-item">
-            <div class="activity-icon" style="background: ${activity.color}">
-                <i class="fas ${activity.icon}"></i>
-            </div>
-            <div class="activity-content">
-                <h4>${activity.text}</h4>
-                <p>${new Date(activity.time).toLocaleDateString()}</p>
-            </div>
-            <span class="activity-time">${getTimeAgo(activity.time)}</span>
-        </div>
-    `).join('');
+window.toggleFocus=id=>{const i=D.focus.find(f=>f.id===id);if(i){i.completed=!i.completed;save('focusItems',D.focus);renderFocus();}};
+window.delFocus=id=>{D.focus=D.focus.filter(f=>f.id!==id);save('focusItems',D.focus);renderFocus();};
+$('addFocusBtn').onclick=()=>{
+  const txt=prompt('Focus item for today:')?.trim();if(!txt)return;
+  const time=prompt('Time label (optional):','')?.trim()||'';
+  D.focus.push({id:Date.now(),text:txt,time,completed:false,dateKey:today(),createdAt:Date.now()});
+  save('focusItems',D.focus);renderFocus();toast('Focus item added');
+};
+
+/* ── Chart ── */
+$('weekFilter').onchange=renderChart;
+window.addEventListener('resize',renderChart);
+
+function renderChart(){
+  const canvas=$('weeklyChart');if(!canvas)return;
+  const ctx=canvas.getContext('2d'),par=canvas.parentElement;
+  const W=par.clientWidth||400,H=par.clientHeight||200,dpr=devicePixelRatio||1;
+  canvas.width=W*dpr;canvas.height=H*dpr;canvas.style.width=`${W}px`;canvas.style.height=`${H}px`;
+  ctx.setTransform(dpr,0,0,dpr,0,0);ctx.clearRect(0,0,W,H);
+  const offset=$('weekFilter').value==='last'?7:0;
+  const now=new Date();now.setHours(0,0,0,0);
+  const dow=(now.getDay()+6)%7;
+  const sow=new Date(now);sow.setDate(now.getDate()-dow-offset);
+  const LABS=['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const vals=LABS.map((_,i)=>{
+    const d=new Date(sow);d.setDate(sow.getDate()+i);
+    const k=d.toISOString().slice(0,10);
+    return D.sSessions.filter(s=>{const sd=new Date(s.date);sd.setHours(0,0,0,0);return sd.toISOString().slice(0,10)===k;}).reduce((a,s)=>a+(Number(s.duration)||0),0)/60;
+  });
+  const maxV=Math.max(1,...vals);
+  const pad={l:36,r:16,t:14,b:34};
+  const cW=W-pad.l-pad.r,cH=H-pad.t-pad.b;
+  const bW=Math.min(36,cW/7-6),gap=(cW-bW*7)/6;
+  const gc='rgba(255,255,255,0.06)',lc='rgba(238,234,255,0.28)';
+  ctx.font=`11px 'Figtree',sans-serif`;ctx.textBaseline='middle';
+  for(let i=0;i<=4;i++){
+    const y=pad.t+(cH/4)*i,v=(1-i/4)*maxV;
+    ctx.strokeStyle=gc;ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(W-pad.r,y);ctx.stroke();
+    ctx.fillStyle=lc;ctx.textAlign='right';
+    ctx.fillText(`${v>=1?v.toFixed(0):v.toFixed(1)}h`,pad.l-4,y);
+  }
+  const gr=ctx.createLinearGradient(0,pad.t,0,H-pad.b);
+  gr.addColorStop(0,'#a78bfa');gr.addColorStop(0.5,'#7c3aed');gr.addColorStop(1,'#4338ca');
+  ctx.textAlign='center';
+  vals.forEach((v,i)=>{
+    const x=pad.l+i*(bW+gap),bH=(v/maxV)*cH,y=H-pad.b-bH,r=5;
+    ctx.fillStyle=gr;
+    ctx.beginPath();ctx.moveTo(x+r,y);ctx.lineTo(x+bW-r,y);
+    ctx.quadraticCurveTo(x+bW,y,x+bW,y+r);ctx.lineTo(x+bW,H-pad.b);ctx.lineTo(x,H-pad.b);ctx.lineTo(x,y+r);ctx.quadraticCurveTo(x,y,x+r,y);ctx.fill();
+    // Glow
+    ctx.shadowColor='rgba(124,58,237,0.4)';ctx.shadowBlur=12;ctx.fill();ctx.shadowBlur=0;
+    ctx.fillStyle=lc;ctx.fillText(LABS[i],x+bW/2,H-pad.b+14);
+  });
 }
 
-function getTimeAgo(timestamp) {
-    const seconds = Math.floor((Date.now() - timestamp) / 1000);
-    if (seconds < 60) return 'Just now';
-    if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
-    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
-    return `${Math.floor(seconds / 86400)}d ago`;
+/* ════════════════════
+   STUDY TRACKER
+════════════════════ */
+let curSubId=null;
+$('addSubjectBtn').onclick=()=>openM('subjectModalWrap');
+
+$('saveSubjectBtn').onclick=()=>{
+  const name=$('subjectName').value.trim();
+  const color=safeColor($('subjectColor').value);
+  const target=clamp(parseInt($('subjectTarget').value)||10,1,168);
+  if(!name){toast('Enter a subject name.','er');return;}
+  D.subjects.push({id:Date.now(),name,color,target,totalHours:0,sessions:0});
+  save('subjects',D.subjects);renderSubjects();closeM('subjectModalWrap');$('subjectName').value='';toast('Subject added');
+};
+
+function renderSubjects(){
+  const g=$('subjectsGrid');
+  if(!D.subjects.length){g.innerHTML=`<div class="empty" style="grid-column:1/-1"><span class="ei2">📖</span><span class="et2">No subjects yet</span></div>`;updateStudyStats();return;}
+  g.innerHTML=D.subjects.map(s=>{
+    const h=Number(s.totalHours)||0,t=clamp(Number(s.target)||10,1,168);
+    const pct=Math.min((h/t)*100,100).toFixed(0),sess=Math.max(0,Number(s.sessions)||0);
+    const avg=sess>0?(h/sess*60).toFixed(0):0,col=safeColor(s.color);
+    return `<div class="subc" style="border-left-color:${col}">
+      <div class="subh"><div class="subn">${esc(s.name)}</div><button class="db always" onclick="delSubject(${s.id})">✕</button></div>
+      <div class="pl"><span>${h.toFixed(1)}h / ${t}h</span><span>${pct}%</span></div>
+      <div class="pb"><div class="pf" style="width:${pct}%;background:linear-gradient(90deg,${col},${col}aa)"></div></div>
+      <div class="sm"><span>${sess} sessions</span><span>${avg} min avg</span></div>
+      <div class="sf2"><button class="btn btn-o btn-sm" onclick="logSess(${s.id})">＋ Log session</button></div>
+    </div>`;
+  }).join('');
+  updateStudyStats();
 }
 
-// ============================================
-// STUDY TRACKER
-// ============================================
-
-let currentSubjectId = null;
-
-document.getElementById('addSubjectBtn')?.addEventListener('click', () => {
-    openModal('subjectModal');
-});
-
-document.getElementById('saveSubjectBtn')?.addEventListener('click', () => {
-    const name = document.getElementById('subjectName').value.trim();
-    const color = document.getElementById('subjectColor').value;
-    const target = parseInt(document.getElementById('subjectTarget').value) || 10;
-    
-    if (!name) {
-        alert('Please enter a subject name');
-        return;
-    }
-    
-    const subject = {
-        id: Date.now(),
-        name,
-        color,
-        target,
-        totalHours: 0,
-        sessions: 0
-    };
-    
-    data.subjects.push(subject);
-    saveData('subjects');
-    renderSubjects();
-    closeModal(document.getElementById('subjectModal'));
-    
-    // Reset form
-    document.getElementById('subjectName').value = '';
-    document.getElementById('subjectColor').value = '#667eea';
-    document.getElementById('subjectTarget').value = '';
-});
-
-function renderSubjects() {
-    const grid = document.getElementById('subjectsGrid');
-    
-    if (data.subjects.length === 0) {
-        grid.innerHTML = `
-            <div class="empty-state" style="grid-column: 1/-1;">
-                <i class="fas fa-book"></i>
-                <p>No subjects yet. Add your first subject to start tracking!</p>
-            </div>
-        `;
-        return;
-    }
-    
-    grid.innerHTML = data.subjects.map(subject => {
-        const progress = Math.min((subject.totalHours / subject.target) * 100, 100);
-        
-        return `
-            <div class="subject-card" style="border-left-color: ${subject.color}">
-                <div class="subject-header">
-                    <h3 class="subject-name">${subject.name}</h3>
-                    <button class="subject-menu" onclick="deleteSubject(${subject.id})">
-                        <i class="fas fa-trash"></i>
-                    </button>
-                </div>
-                <div class="subject-progress">
-                    <div class="progress-info">
-                        <span>${subject.totalHours.toFixed(1)}h / ${subject.target}h</span>
-                        <span>${progress.toFixed(0)}%</span>
-                    </div>
-                    <div class="progress-bar">
-                        <div class="progress-fill" style="width: ${progress}%; background: ${subject.color}"></div>
-                    </div>
-                </div>
-                <div class="subject-stats">
-                    <div class="subject-stat">
-                        <span>${subject.sessions}</span>
-                        <p>Sessions</p>
-                    </div>
-                    <div class="subject-stat">
-                        <span>${subject.sessions > 0 ? (subject.totalHours / subject.sessions * 60).toFixed(0) : 0}m</span>
-                        <p>Avg/Session</p>
-                    </div>
-                </div>
-                <div class="subject-actions">
-                    <button class="btn-small primary" onclick="logSession(${subject.id})">
-                        <i class="fas fa-plus"></i> Log Session
-                    </button>
-                </div>
-            </div>
-        `;
-    }).join('');
-    
-    updateStudyStats();
+function updateStudyStats(){
+  const ts=D.subjects.reduce((a,s)=>a+(Number(s.sessions)||0),0);
+  const th=D.subjects.reduce((a,s)=>a+(Number(s.totalHours)||0),0);
+  $('totalSessions').textContent=ts;
+  $('avgDuration').textContent=ts>0?`${(th/ts*60).toFixed(0)} min`:'0 min';
+  const top=D.subjects.reduce((a,s)=>(Number(s.totalHours)||0)>(Number(a?.totalHours)||0)?s:a,null);
+  $('topSubject').textContent=top?.name||'—';
 }
 
-function logSession(subjectId) {
-    currentSubjectId = subjectId;
-    openModal('sessionModal');
+window.delSubject=id=>{ if(!confirm('Delete this subject?'))return; D.subjects=D.subjects.filter(s=>s.id!==id); save('subjects',D.subjects); renderSubjects(); };
+window.logSess=id=>{ curSubId=id; $('sessionDuration').value=''; $('sessionNotes').value=''; openM('sessionModalWrap'); };
+
+$('saveSessionBtn').onclick=()=>{
+  const dur=parseInt($('sessionDuration').value)||0;
+  if(dur<=0){toast('Enter a valid duration.','er');return;}
+  const sub=D.subjects.find(s=>s.id===curSubId);if(!sub)return;
+  sub.totalHours=(Number(sub.totalHours)||0)+dur/60;
+  sub.sessions=(Number(sub.sessions)||0)+1;
+  D.sSessions.push({subject:sub.name,duration:dur,notes:$('sessionNotes').value.trim(),date:Date.now()});
+  save('subjects',D.subjects);save('studySessions',D.sSessions);
+  renderSubjects();closeM('sessionModalWrap');toast('Session logged! 🎉');
+};
+
+/* ════════════════════
+   TODO
+════════════════════ */
+let tFilter='all';
+function renderTodos(){
+  let items=D.todos;
+  if(tFilter==='active')items=D.todos.filter(t=>!t.completed);
+  if(tFilter==='completed')items=D.todos.filter(t=>t.completed);
+  const el=$('todoList');
+  if(!items.length){el.innerHTML=`<div class="empty"><span class="ei2">✅</span><span class="et2">No tasks</span></div>`;return;}
+  el.innerHTML=items.map(t=>`<div class="ti ${t.completed?'done':''}"><input type="checkbox" class="tc" ${t.completed?'checked':''} onchange="toggleTodo(${t.id})"><div class="pp ${t.priority||'medium'}"></div><span class="tt">${esc(t.text)}</span><button class="db" onclick="delTodo(${t.id})">✕</button></div>`).join('');
 }
 
-document.getElementById('saveSessionBtn')?.addEventListener('click', () => {
-    const duration = parseInt(document.getElementById('sessionDuration').value);
-    const notes = document.getElementById('sessionNotes').value.trim();
-    
-    if (!duration || duration <= 0) {
-        alert('Please enter a valid duration');
-        return;
-    }
-    
-    const subject = data.subjects.find(s => s.id === currentSubjectId);
-    if (subject) {
-        subject.totalHours += duration / 60;
-        subject.sessions++;
-        
-        // Add to study sessions
-        data.studySessions.push({
-            subject: subject.name,
-            duration,
-            notes,
-            date: Date.now()
-        });
-        
-        saveData('subjects');
-        saveData('studySessions');
-        renderSubjects();
-        closeModal(document.getElementById('sessionModal'));
-        
-        // Reset form
-        document.getElementById('sessionDuration').value = '';
-        document.getElementById('sessionNotes').value = '';
-        
-        showNotification('Study session logged successfully!');
-    }
-});
+function addTodo(){
+  const inp=$('todoInput'),txt=inp.value.trim();if(!txt)return;
+  D.todos.push({id:Date.now(),text:txt,priority:$('todoPriority').value,completed:false,createdAt:Date.now()});
+  save('todos',D.todos);renderTodos();inp.value='';toast('Task added');
+}
+$('addTodoBtn').onclick=addTodo;
+$('todoInput').onkeydown=e=>{ if(e.key==='Enter')addTodo(); };
+window.toggleTodo=id=>{ const t=D.todos.find(t=>t.id===id);if(t){t.completed=!t.completed;if(t.completed)t.completedAt=Date.now();save('todos',D.todos);renderTodos();} };
+window.delTodo=id=>{ D.todos=D.todos.filter(t=>t.id!==id);save('todos',D.todos);renderTodos(); };
+document.querySelectorAll('.fb').forEach(b=>b.onclick=()=>{ document.querySelectorAll('.fb').forEach(x=>x.classList.remove('active'));b.classList.add('active');tFilter=b.dataset.filter;renderTodos(); });
 
-function deleteSubject(id) {
-    if (confirm('Are you sure you want to delete this subject?')) {
-        data.subjects = data.subjects.filter(s => s.id !== id);
-        saveData('subjects');
-        renderSubjects();
-    }
+/* ════════════════════
+   POMODORO
+════════════════════ */
+const CIRC=2*Math.PI*96;
+let timeLeft=D.settings.pomodoro*60,pomRun=false,pomInt=null,pomMode='pomodoro',pomCount=0;
+
+function getModeTime(){ return pomMode==='pomodoro'?D.settings.pomodoro:pomMode==='short'?D.settings.shortBreak:D.settings.longBreak; }
+
+function updateTimer(){
+  const m=Math.floor(timeLeft/60),s=timeLeft%60;
+  $('timerDisplay').textContent=`${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  const total=getModeTime()*60,off=CIRC-CIRC*(total-timeLeft)/total;
+  $('ringProgress').style.strokeDashoffset=clamp(off,0,CIRC);
 }
 
-function updateStudyStats() {
-    const totalSessions = data.subjects.reduce((acc, s) => acc + s.sessions, 0);
-    const totalHours = data.subjects.reduce((acc, s) => acc + s.totalHours, 0);
-    const avgDuration = totalSessions > 0 ? (totalHours / totalSessions * 60).toFixed(0) : 0;
-    
-    document.getElementById('totalSessions').textContent = totalSessions;
-    document.getElementById('avgDuration').textContent = `${avgDuration} min`;
-    
-    const topSubject = data.subjects.reduce((top, subject) => 
-        subject.totalHours > (top?.totalHours || 0) ? subject : top, null
-    );
-    
-    document.getElementById('topSubject').textContent = topSubject?.name || '-';
+function resetTimer(){
+  clearInterval(pomInt);pomRun=false;timeLeft=getModeTime()*60;updateTimer();
+  const b=$('timerStartBtn');
+  b.innerHTML=`<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>Start`;
+  b.className='btn btn-p';
+  $('timerLabel').textContent=pomMode==='pomodoro'?'FOCUS TIME':pomMode==='short'?'SHORT BREAK':'LONG BREAK';
 }
 
-// ============================================
-// TODO LIST
-// ============================================
-
-let currentFilter = 'all';
-
-document.getElementById('addTodoBtn')?.addEventListener('click', addTodo);
-document.getElementById('todoInput')?.addEventListener('keypress', (e) => {
-    if (e.key === 'Enter') addTodo();
-});
-
-function addTodo() {
-    const input = document.getElementById('todoInput');
-    const priority = document.getElementById('todoPriority').value;
-    const text = input.value.trim();
-    
-    if (!text) return;
-    
-    const todo = {
-        id: Date.now(),
-        text,
-        priority,
-        completed: false,
-        createdAt: Date.now()
-    };
-    
-    data.todos.push(todo);
-    saveData('todos');
-    renderTodos();
-    input.value = '';
-    showNotification('Task added successfully!');
+function startTimer(){
+  if(pomRun){pauseTimer();return;}
+  if(timeLeft<=0)resetTimer();
+  pomRun=true;
+  const b=$('timerStartBtn');
+  b.innerHTML=`<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg>Pause`;
+  b.className='btn btn-o';
+  pomInt=setInterval(()=>{ timeLeft--;updateTimer();if(timeLeft<=0)completeTimer(); },1000);
 }
 
-function renderTodos() {
-    const list = document.getElementById('todoList');
-    let filteredTodos = data.todos;
-    
-    if (currentFilter === 'active') {
-        filteredTodos = data.todos.filter(t => !t.completed);
-    } else if (currentFilter === 'completed') {
-        filteredTodos = data.todos.filter(t => t.completed);
-    }
-    
-    if (filteredTodos.length === 0) {
-        list.innerHTML = `
-            <div class="empty-state">
-                <i class="fas fa-tasks"></i>
-                <p>No tasks ${currentFilter === 'all' ? 'yet' : currentFilter}</p>
-            </div>
-        `;
-        return;
-    }
-    
-    list.innerHTML = filteredTodos.map(todo => `
-        <div class="todo-item ${todo.completed ? 'completed' : ''}">
-            <input type="checkbox" class="todo-checkbox" ${todo.completed ? 'checked' : ''} 
-                   onchange="toggleTodo(${todo.id})">
-            <div class="todo-priority ${todo.priority}"></div>
-            <span class="todo-text">${todo.text}</span>
-            <div class="todo-actions">
-                <button class="todo-action-btn" onclick="deleteTodo(${todo.id})">
-                    <i class="fas fa-trash"></i>
-                </button>
-            </div>
-        </div>
-    `).join('');
+function pauseTimer(){
+  clearInterval(pomInt);pomRun=false;
+  const b=$('timerStartBtn');
+  b.innerHTML=`<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>Resume`;
+  b.className='btn btn-p';
 }
 
-function toggleTodo(id) {
-    const todo = data.todos.find(t => t.id === id);
-    if (todo) {
-        todo.completed = !todo.completed;
-        if (todo.completed) {
-            todo.completedAt = Date.now();
-        }
-        saveData('todos');
-        renderTodos();
-    }
+function completeTimer(){
+  clearInterval(pomInt);pomRun=false;
+  if(D.settings.soundEnabled){try{new Audio('data:audio/wav;base64,UklGRigAAABXQVZFZm10IBAAAAABAAEARKwAAIhYAQACABAAZGF0YQQAAAAAAA==').play();}catch{}}
+  if(pomMode==='pomodoro'){
+    pomCount=(pomCount+1)%4;
+    D.pSessions.push({type:'pomodoro',duration:D.settings.pomodoro,date:Date.now()});
+    save('pomodoroSessions',D.pSessions);updatePomStats();toast('Pomodoro done! Take a break 🎉');
+    if(D.settings.autoStartBreaks)setTimeout(()=>{switchMode(pomCount===0?'long':'short');startTimer();},2000);
+  } else {
+    D.pSessions.push({type:pomMode,duration:getModeTime(),date:Date.now()});
+    save('pomodoroSessions',D.pSessions);updatePomStats();toast("Break over! Let's focus 💪");
+    if(D.settings.autoStartBreaks)setTimeout(()=>{switchMode('pomodoro');startTimer();},2000);
+  }
+  const b=$('timerStartBtn');b.innerHTML=`<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="5 3 19 12 5 21 5 3"/></svg>Start`;b.className='btn btn-p';
 }
 
-function deleteTodo(id) {
-    data.todos = data.todos.filter(t => t.id !== id);
-    saveData('todos');
-    renderTodos();
+function switchMode(m){
+  pomMode=m;
+  document.querySelectorAll('.mt2').forEach(t=>t.classList.toggle('active',t.dataset.mode===m));
+  resetTimer();
 }
 
-// Filter buttons
-document.querySelectorAll('.filter-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-        document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        currentFilter = btn.dataset.filter;
-        renderTodos();
-    });
-});
-
-// ============================================
-// POMODORO TIMER
-// ============================================
-
-let timerInterval = null;
-let timeLeft = data.settings.pomodoro * 60;
-let isRunning = false;
-let currentMode = 'pomodoro';
-let pomodoroCount = 0;
-
-const timerDisplay = document.getElementById('timerDisplay');
-const timerLabel = document.getElementById('timerLabel');
-const timerStartBtn = document.getElementById('timerStartBtn');
-const timerResetBtn = document.getElementById('timerResetBtn');
-const timerRingProgress = document.getElementById('timerRingProgress');
-
-// Mode buttons
-document.querySelectorAll('.mode-btn').forEach(btn => {
-    btn.addEventListener('click', () => {
-        if (isRunning) return;
-        
-        document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
-        btn.classList.add('active');
-        currentMode = btn.dataset.mode;
-        resetTimer();
-    });
-});
-
-function updateTimerDisplay() {
-    const minutes = Math.floor(timeLeft / 60);
-    const seconds = timeLeft % 60;
-    timerDisplay.textContent = `${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
-    
-    // Update ring progress
-    const totalTime = getModeTime() * 60;
-    const progress = ((totalTime - timeLeft) / totalTime) * 880;
-    timerRingProgress.style.strokeDashoffset = progress;
+function updatePomStats(){
+  const focus=D.pSessions.filter(s=>s.type==='pomodoro');
+  const total=focus.reduce((a,s)=>a+(Number(s.duration)||0),0);
+  $('pomodoroCount').textContent=`${focus.length%4}/4`;
+  $('pomodoroTotalTime').textContent=`${Math.floor(total/60)}h ${total%60}m`;
+  const hist=$('timerHistory'),rec=[...D.pSessions].reverse().slice(0,8);
+  if(!rec.length){hist.innerHTML=`<div class="empty"><span class="ei2">⏱</span><span class="et2">No sessions yet</span></div>`;return;}
+  hist.innerHTML=rec.map(s=>{
+    const cls=s.type==='pomodoro'?'hbf':s.type==='short'?'hbs':'hbl';
+    const lbl=s.type==='pomodoro'?'Focus':s.type==='short'?'Short break':'Long break';
+    return `<div class="hi"><span class="hb ${cls}">${lbl}</span><div class="hd"><div class="hn">${new Date(s.date).toLocaleDateString()}</div><div class="hda">${new Date(s.date).toLocaleTimeString()}</div></div><span class="hdr">${s.duration}m</span></div>`;
+  }).join('');
 }
 
-function getModeTime() {
-    if (currentMode === 'pomodoro') return data.settings.pomodoro;
-    if (currentMode === 'short') return data.settings.shortBreak;
-    return data.settings.longBreak;
+document.querySelectorAll('.mt2').forEach(b=>b.onclick=()=>{if(!pomRun)switchMode(b.dataset.mode);});
+$('timerStartBtn').onclick=startTimer;
+$('timerResetBtn').onclick=resetTimer;
+
+$('pomSettingsBtn').onclick=()=>{
+  $('pomodoroDuration').value=D.settings.pomodoro;
+  $('shortBreakDuration').value=D.settings.shortBreak;
+  $('longBreakDuration').value=D.settings.longBreak;
+  $('autoStartBreaks').checked=D.settings.autoStartBreaks;
+  $('soundEnabled').checked=D.settings.soundEnabled;
+  openM('pomSettingsModalWrap');
+};
+$('savePomSettingsBtn').onclick=()=>{
+  D.settings.pomodoro=clamp(parseInt($('pomodoroDuration').value)||25,1,60);
+  D.settings.shortBreak=clamp(parseInt($('shortBreakDuration').value)||5,1,30);
+  D.settings.longBreak=clamp(parseInt($('longBreakDuration').value)||15,1,60);
+  D.settings.autoStartBreaks=$('autoStartBreaks').checked;
+  D.settings.soundEnabled=$('soundEnabled').checked;
+  save('pomodoroSettings',D.settings);closeM('pomSettingsModalWrap');resetTimer();toast('Settings saved');
+};
+$('goalProgress').oninput=e=>$('goalProgressValue').textContent=`${e.target.value}%`;
+
+/* ════════════════════
+   NOTES
+════════════════════ */
+let editNoteId=null;
+$('addNoteBtn').onclick=()=>{editNoteId=null;$('noteModalTitle').textContent='New Note';$('noteTitle').value='';$('noteContent').value='';openM('noteModalWrap');};
+$('saveNoteBtn').onclick=()=>{
+  const title=$('noteTitle').value.trim(),content=$('noteContent').value.trim();
+  if(!title||!content){toast('Fill in both title and content.','er');return;}
+  if(editNoteId!==null){const n=D.notes.find(n=>n.id===editNoteId);if(n){n.title=title;n.content=content;n.updatedAt=Date.now();}}
+  else D.notes.push({id:Date.now(),title,content,createdAt:Date.now(),updatedAt:Date.now()});
+  save('notes',D.notes);renderNotes();closeM('noteModalWrap');toast('Note saved');
+};
+
+function renderNotes(){
+  const g=$('notesGrid');
+  if(!D.notes.length){g.innerHTML=`<div class="empty" style="grid-column:1/-1"><span class="ei2">📝</span><span class="et2">No notes yet</span></div>`;return;}
+  g.innerHTML=D.notes.map(n=>{
+    const prev=n.content.length>160?n.content.slice(0,160)+'…':n.content;
+    return `<div class="nc" onclick="editNote(${n.id})"><div class="nh"><div class="nt">${esc(n.title)}</div><button class="db always" onclick="event.stopPropagation();delNote(${n.id})">✕</button></div><div class="nb">${esc(prev)}</div><div class="nf"><span>${new Date(n.updatedAt).toLocaleDateString()}</span><span>${n.content.length} chars</span></div></div>`;
+  }).join('');
+}
+window.editNote=id=>{const n=D.notes.find(n=>n.id===id);if(!n)return;editNoteId=id;$('noteModalTitle').textContent='Edit Note';$('noteTitle').value=n.title;$('noteContent').value=n.content;openM('noteModalWrap');};
+window.delNote=id=>{if(!confirm('Delete this note?'))return;D.notes=D.notes.filter(n=>n.id!==id);save('notes',D.notes);renderNotes();};
+
+/* ════════════════════
+   CALENDAR
+════════════════════ */
+let calDate=new Date();
+$('addEventBtn').onclick=()=>{$('eventDate').value=today();openM('eventModalWrap');};
+$('saveEventBtn').onclick=()=>{
+  const title=$('eventTitle').value.trim(),date=$('eventDate').value;
+  if(!title||!date){toast('Fill in title and date.','er');return;}
+  D.events.push({id:Date.now(),title,date,time:$('eventTime').value,type:$('eventType').value,createdAt:Date.now()});
+  save('events',D.events);renderCalendar();closeM('eventModalWrap');$('eventTitle').value='';toast('Event added');
+};
+$('prevMonth').onclick=()=>{calDate.setMonth(calDate.getMonth()-1);renderCalendar();};
+$('nextMonth').onclick=()=>{calDate.setMonth(calDate.getMonth()+1);renderCalendar();};
+
+function renderCalendar(){
+  const y=calDate.getFullYear(),m=calDate.getMonth();
+  $('currentMonth').textContent=calDate.toLocaleString('default',{month:'long',year:'numeric'});
+  const firstDay=new Date(y,m,1).getDay(),dims=new Date(y,m+1,0).getDate(),prev=new Date(y,m,0).getDate();
+  const evDates=new Set(D.events.map(e=>e.date));
+  const g=$('calendarGrid');g.innerHTML='';
+  ['Su','Mo','Tu','We','Th','Fr','Sa'].forEach(d=>{const h=document.createElement('div');h.className='cdh';h.textContent=d;g.appendChild(h);});
+  for(let i=firstDay-1;i>=0;i--){const d=document.createElement('div');d.className='cd other';d.textContent=prev-i;g.appendChild(d);}
+  const now=new Date();now.setHours(0,0,0,0);
+  for(let i=1;i<=dims;i++){
+    const d=document.createElement('div');d.className='cd';
+    const ds=`${y}-${String(m+1).padStart(2,'0')}-${String(i).padStart(2,'0')}`;
+    if(evDates.has(ds))d.classList.add('has-event');
+    if(new Date(y,m,i).getTime()===now.getTime())d.classList.add('today');
+    d.textContent=i;g.appendChild(d);
+  }
+  const rem=42-(firstDay+dims);
+  for(let i=1;i<=rem;i++){const d=document.createElement('div');d.className='cd other';d.textContent=i;g.appendChild(d);}
+  renderUpcoming();
 }
 
-function startTimer() {
-    if (isRunning) {
-        pauseTimer();
-        return;
-    }
-    
-    isRunning = true;
-    timerStartBtn.innerHTML = '<i class="fas fa-pause"></i> Pause';
-    timerStartBtn.classList.add('pause');
-    
-    timerInterval = setInterval(() => {
-        timeLeft--;
-        updateTimerDisplay();
-        
-        if (timeLeft === 0) {
-            completeTimer();
-        }
-    }, 1000);
+function renderUpcoming(){
+  const t=today(),up=D.events.filter(e=>e.date>=t).sort((a,b)=>a.date.localeCompare(b.date)).slice(0,6);
+  const el=$('upcomingEvents');
+  if(!up.length){el.innerHTML=`<div class="empty"><span class="ei2">📅</span><span class="et2">No upcoming events</span></div>`;return;}
+  const TC={exam:'#f43f5e',assignment:'#f59e0b',class:'#0ea5e9',other:'#7c3aed'};
+  el.innerHTML=up.map(e=>{const c=TC[e.type]||'#7c3aed';return `<div class="ei" style="border-left-color:${c}"><div class="etn">${esc(e.title)}</div><div class="em">${e.date}${e.time?` · ${e.time}`:''}</div><span class="etb" style="background:${c}20;color:${c}">${e.type}</span></div>`;}).join('');
 }
 
-function pauseTimer() {
-    isRunning = false;
-    clearInterval(timerInterval);
-    timerStartBtn.innerHTML = '<i class="fas fa-play"></i> Start';
-    timerStartBtn.classList.remove('pause');
+/* ════════════════════
+   GOALS
+════════════════════ */
+$('addGoalBtn').onclick=()=>{$('goalDate').value=today();$('goalProgress').value=0;$('goalProgressValue').textContent='0%';$('goalTitle').value='';openM('goalModalWrap');};
+$('saveGoalBtn').onclick=()=>{
+  const title=$('goalTitle').value.trim(),date=$('goalDate').value,progress=clamp(parseInt($('goalProgress').value)||0,0,100);
+  if(!title||!date){toast('Fill in title and date.','er');return;}
+  D.goals.push({id:Date.now(),title,date,progress,createdAt:Date.now()});
+  save('goals',D.goals);renderGoals();closeM('goalModalWrap');toast('Goal created! 🚀');
+};
+
+function renderGoals(){
+  const el=$('goalsList');
+  if(!D.goals.length){el.innerHTML=`<div class="empty"><span class="ei2">🏆</span><span class="et2">No goals yet</span></div>`;return;}
+  el.innerHTML=D.goals.map(g=>{
+    const p=clamp(Number(g.progress)||0,0,100);
+    const col=p===100?'#10b981':p>=60?'#f59e0b':'#7c3aed';
+    return `<div class="gc"><div class="gch"><div><div class="gct">${esc(g.title)}</div><div class="gcd">Target: ${g.date}</div></div><div style="font-family:'Syne',sans-serif;font-size:24px;font-weight:800;background:linear-gradient(135deg,${col},${col}aa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">${p}%</div></div><div class="gpl"><span>Progress</span><span>${p===100?'🎉 Complete':'In progress'}</span></div><div class="pb" style="height:8px"><div class="pf" style="width:${p}%;background:linear-gradient(90deg,${col},${col}aa)"></div></div><div class="gf"><button class="btn btn-o btn-sm" onclick="updateGoal(${g.id})">Update</button><button class="btn btn-o btn-sm" style="color:#f43f5e" onclick="delGoal(${g.id})">Delete</button></div></div>`;
+  }).join('');
 }
+window.updateGoal=id=>{const g=D.goals.find(g=>g.id===id);if(!g)return;const v=prompt(`Progress for "${g.title}" (0–100):`,g.progress);if(v===null)return;g.progress=clamp(parseInt(v)||0,0,100);save('goals',D.goals);renderGoals();if(g.progress===100)toast('Goal completed! 🎉');};
+window.delGoal=id=>{if(!confirm('Delete this goal?'))return;D.goals=D.goals.filter(g=>g.id!==id);save('goals',D.goals);renderGoals();};
 
-function resetTimer() {
-    pauseTimer();
-    timeLeft = getModeTime() * 60;
-    updateTimerDisplay();
-    timerRingProgress.style.strokeDashoffset = 0;
-    
-    if (currentMode === 'pomodoro') {
-        timerLabel.textContent = 'Focus Time';
-    } else if (currentMode === 'short') {
-        timerLabel.textContent = 'Short Break';
-    } else {
-        timerLabel.textContent = 'Long Break';
-    }
-}
-
-function completeTimer() {
-    pauseTimer();
-    
-    if (data.settings.soundEnabled) {
-        playNotificationSound();
-    }
-    
-    if (currentMode === 'pomodoro') {
-        pomodoroCount++;
-        
-        // Log session
-        data.pomodoroSessions.push({
-            type: 'pomodoro',
-            duration: data.settings.pomodoro,
-            date: Date.now()
-        });
-        saveData('pomodoroSessions');
-        updatePomodoroStats();
-        
-        showNotification('Pomodoro completed! Time for a break.');
-        
-        // Auto-switch to break
-        if (data.settings.autoStartBreaks) {
-            setTimeout(() => {
-                if (pomodoroCount % 4 === 0) {
-                    switchMode('long');
-                } else {
-                    switchMode('short');
-                }
-                startTimer();
-            }, 2000);
-        }
-    } else {
-        showNotification('Break completed! Ready to focus?');
-        
-        if (data.settings.autoStartBreaks) {
-            setTimeout(() => {
-                switchMode('pomodoro');
-                startTimer();
-            }, 2000);
-        }
-    }
-}
-
-function switchMode(mode) {
-    currentMode = mode;
-    document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
-    document.querySelector(`[data-mode="${mode}"]`).classList.add('active');
-    resetTimer();
-}
-
-function playNotificationSound() {
-    const audio = new Audio('data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBTGH0fPTgjMGHm7A7+OZLQ8MU6vn77BbGgk+ltv0yHssCC1+zPLaizsIHWq77OScNxENVK7o87FeHAc+lt30yXosCC1+zPLaizsIHWq77OScNxENVK7o87FeHAc+lt30yXosCC1+zPLaizsIHWq77OScNxENVK7o87FeHAc+lt30yXosCC1+zPLaizsIHWq77OScNxENVK7o87FeHAc+lt30yXosCC1+zPLaizsIHWq77OScNxENVK7o87FeHAc+lt30yXosCC1+zPLaizsIHWq77OScNxENVK7o87FeHAc+lt30yXosCC1+zPLaizsIHWq77OScNxENVK7o87FeHAc+lt30yXosCC1+zPLaizsIHWq77OScNxENVK7o87FeHAc+lt30yXosCC1+zPLaizsIHWq77OScNxENVK7o87FeHAc+lt30yXosCC1+zPLaizsIHWq77OScNxENVK7o87FeHAc+lt30yXosCC1+zPLaizsIHWq77OScNxENVK7o87FeHAc+lt30yXosCC1+zPLaizsIHWq77OScNxENVK7o87FeHAc+lt30yXosCC1+zPLaizsIHWq77OScNxENVK7o87FeHAc+lt30yXosCC1+zPLaizsIHWq77OScNxENVK7o87FeHAc+lt30yXosCC1+zPLaizsIHWq77OScNxENVK7o87FeHAc+lt30yXosCC1+zPLaizsI');
-    audio.play().catch(() => {});
-}
-
-function updatePomodoroStats() {
-    const totalMinutes = data.pomodoroSessions.reduce((acc, s) => acc + s.duration, 0);
-    const hours = Math.floor(totalMinutes / 60);
-    const minutes = totalMinutes % 60;
-    
-    document.getElementById('pomodoroCount').textContent = `${pomodoroCount} / 4`;
-    document.getElementById('pomodoroTotalTime').textContent = `${hours}h ${minutes}m`;
-    
-    // Update history
-    const historyList = document.getElementById('timerHistory');
-    const recentSessions = data.pomodoroSessions.slice(-5).reverse();
-    
-    if (recentSessions.length === 0) {
-        historyList.innerHTML = `
-            <div class="empty-state">
-                <i class="fas fa-history"></i>
-                <p>No sessions yet</p>
-            </div>
-        `;
-        return;
-    }
-    
-    historyList.innerHTML = recentSessions.map(session => `
-        <div class="history-item">
-            <div class="history-info">
-                <div class="history-icon">
-                    <i class="fas fa-clock"></i>
-                </div>
-                <div class="history-details">
-                    <h4>${session.type === 'pomodoro' ? 'Focus Session' : 'Break'}</h4>
-                    <p>${new Date(session.date).toLocaleDateString()} at ${new Date(session.date).toLocaleTimeString()}</p>
-                </div>
-            </div>
-            <span class="history-time">${session.duration}m</span>
-        </div>
-    `).join('');
-}
-
-timerStartBtn?.addEventListener('click', startTimer);
-timerResetBtn?.addEventListener('click', resetTimer);
-
-// Pomodoro settings
-document.getElementById('pomodoroSettingsBtn')?.addEventListener('click', () => {
-    document.getElementById('pomodoroDuration').value = data.settings.pomodoro;
-    document.getElementById('shortBreakDuration').value = data.settings.shortBreak;
-    document.getElementById('longBreakDuration').value = data.settings.longBreak;
-    document.getElementById('autoStartBreaks').checked = data.settings.autoStartBreaks;
-    document.getElementById('soundEnabled').checked = data.settings.soundEnabled;
-    openModal('pomodoroSettingsModal');
-});
-
-document.getElementById('savePomodoroSettingsBtn')?.addEventListener('click', () => {
-    data.settings.pomodoro = parseInt(document.getElementById('pomodoroDuration').value);
-    data.settings.shortBreak = parseInt(document.getElementById('shortBreakDuration').value);
-    data.settings.longBreak = parseInt(document.getElementById('longBreakDuration').value);
-    data.settings.autoStartBreaks = document.getElementById('autoStartBreaks').checked;
-    data.settings.soundEnabled = document.getElementById('soundEnabled').checked;
-    
-    saveData('settings');
-    resetTimer();
-    closeModal(document.getElementById('pomodoroSettingsModal'));
-    showNotification('Settings saved successfully!');
-});
-
-// ============================================
-// NOTES
-// ============================================
-
-let editingNoteId = null;
-
-document.getElementById('addNoteBtn')?.addEventListener('click', () => {
-    editingNoteId = null;
-    document.getElementById('noteModalTitle').textContent = 'New Note';
-    document.getElementById('noteTitle').value = '';
-    document.getElementById('noteContent').value = '';
-    openModal('noteModal');
-});
-
-document.getElementById('saveNoteBtn')?.addEventListener('click', () => {
-    const title = document.getElementById('noteTitle').value.trim();
-    const content = document.getElementById('noteContent').value.trim();
-    
-    if (!title || !content) {
-        alert('Please fill in both title and content');
-        return;
-    }
-    
-    if (editingNoteId) {
-        const note = data.notes.find(n => n.id === editingNoteId);
-        if (note) {
-            note.title = title;
-            note.content = content;
-            note.updatedAt = Date.now();
-        }
-    } else {
-        const note = {
-            id: Date.now(),
-            title,
-            content,
-            createdAt: Date.now(),
-            updatedAt: Date.now()
-        };
-        data.notes.push(note);
-    }
-    
-    saveData('notes');
-    renderNotes();
-    closeModal(document.getElementById('noteModal'));
-    showNotification('Note saved successfully!');
-});
-
-function renderNotes() {
-    const grid = document.getElementById('notesGrid');
-    
-    if (data.notes.length === 0) {
-        grid.innerHTML = `
-            <div class="empty-state" style="grid-column: 1/-1;">
-                <i class="fas fa-sticky-note"></i>
-                <p>No notes yet. Create your first note!</p>
-            </div>
-        `;
-        return;
-    }
-    
-    grid.innerHTML = data.notes.map(note => `
-        <div class="note-card" onclick="editNote(${note.id})">
-            <div class="note-header">
-                <h3 class="note-title">${note.title}</h3>
-                <button class="note-menu" onclick="event.stopPropagation(); deleteNote(${note.id})">
-                    <i class="fas fa-trash"></i>
-                </button>
-            </div>
-            <div class="note-content">${note.content}</div>
-            <div class="note-footer">
-                <span>${new Date(note.updatedAt).toLocaleDateString()}</span>
-                <span>${note.content.length} characters</span>
-            </div>
-        </div>
-    `).join('');
-}
-
-function editNote(id) {
-    const note = data.notes.find(n => n.id === id);
-    if (note) {
-        editingNoteId = id;
-        document.getElementById('noteModalTitle').textContent = 'Edit Note';
-        document.getElementById('noteTitle').value = note.title;
-        document.getElementById('noteContent').value = note.content;
-        openModal('noteModal');
-    }
-}
-
-function deleteNote(id) {
-    if (confirm('Are you sure you want to delete this note?')) {
-        data.notes = data.notes.filter(n => n.id !== id);
-        saveData('notes');
-        renderNotes();
-    }
-}
-
-// ============================================
-// CALENDAR
-// ============================================
-
-let currentDate = new Date();
-
-function initCalendar() {
-    renderCalendar();
-    renderUpcomingEvents();
-}
-
-function renderCalendar() {
-    const year = currentDate.getFullYear();
-    const month = currentDate.getMonth();
-    
-    document.getElementById('currentMonth').textContent = 
-        `${currentDate.toLocaleString('default', { month: 'long' })} ${year}`;
-    
-    const firstDay = new Date(year, month, 1).getDay();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const daysInPrevMonth = new Date(year, month, 0).getDate();
-    
-    const grid = document.getElementById('calendarGrid');
-    grid.innerHTML = '';
-    
-    // Day headers
-    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-    days.forEach(day => {
-        const header = document.createElement('div');
-        header.className = 'calendar-day-header';
-        header.textContent = day;
-        grid.appendChild(header);
-    });
-    
-    // Previous month days
-    for (let i = firstDay - 1; i >= 0; i--) {
-        const day = document.createElement('div');
-        day.className = 'calendar-day other-month';
-        day.textContent = daysInPrevMonth - i;
-        grid.appendChild(day);
-    }
-    
-    // Current month days
-    const today = new Date();
-    for (let i = 1; i <= daysInMonth; i++) {
-        const day = document.createElement('div');
-        day.className = 'calendar-day';
-        day.textContent = i;
-        
-        const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
-        const hasEvent = data.events.some(e => e.date === dateStr);
-        
-        if (hasEvent) {
-            day.classList.add('has-event');
-        }
-        
-        if (today.getDate() === i && today.getMonth() === month && today.getFullYear() === year) {
-            day.classList.add('today');
-        }
-        
-        grid.appendChild(day);
-    }
-    
-    // Next month days
-    const remainingDays = 42 - (firstDay + daysInMonth);
-    for (let i = 1; i <= remainingDays; i++) {
-        const day = document.createElement('div');
-        day.className = 'calendar-day other-month';
-        day.textContent = i;
-        grid.appendChild(day);
-    }
-}
-
-document.getElementById('prevMonth')?.addEventListener('click', () => {
-    currentDate.setMonth(currentDate.getMonth() - 1);
-    renderCalendar();
-});
-
-document.getElementById('nextMonth')?.addEventListener('click', () => {
-    currentDate.setMonth(currentDate.getMonth() + 1);
-    renderCalendar();
-});
-
-document.getElementById('addEventBtn')?.addEventListener('click', () => {
-    openModal('eventModal');
-});
-
-document.getElementById('saveEventBtn')?.addEventListener('click', () => {
-    const title = document.getElementById('eventTitle').value.trim();
-    const date = document.getElementById('eventDate').value;
-    const time = document.getElementById('eventTime').value;
-    const type = document.getElementById('eventType').value;
-    
-    if (!title || !date) {
-        alert('Please fill in title and date');
-        return;
-    }
-    
-    const event = {
-        id: Date.now(),
-        title,
-        date,
-        time,
-        type,
-        createdAt: Date.now()
-    };
-    
-    data.events.push(event);
-    saveData('events');
-    renderCalendar();
-    renderUpcomingEvents();
-    closeModal(document.getElementById('eventModal'));
-    
-    // Reset form
-    document.getElementById('eventTitle').value = '';
-    document.getElementById('eventDate').value = '';
-    document.getElementById('eventTime').value = '';
-    
-    showNotification('Event added successfully!');
-});
-
-function renderUpcomingEvents() {
-    const container = document.getElementById('upcomingEvents');
-    const upcoming = data.events
-        .filter(e => new Date(e.date) >= new Date())
-        .sort((a, b) => new Date(a.date) - new Date(b.date))
-        .slice(0, 5);
-    
-    if (upcoming.length === 0) {
-        container.innerHTML = `
-            <div class="empty-state">
-                <i class="fas fa-calendar-alt"></i>
-                <p>No upcoming events</p>
-            </div>
-        `;
-        return;
-    }
-    
-    container.innerHTML = upcoming.map(event => {
-        const eventDate = new Date(event.date);
-        const typeColors = {
-            exam: '#ef4444',
-            assignment: '#f59e0b',
-            class: '#3b82f6',
-            other: '#8b5cf6'
-        };
-        
-        return `
-            <div class="event-item" style="border-left-color: ${typeColors[event.type]}">
-                <div class="event-date">
-                    <div class="event-day">${eventDate.getDate()}</div>
-                    <div class="event-month">${eventDate.toLocaleString('default', { month: 'short' })}</div>
-                </div>
-                <div class="event-details">
-                    <h4>${event.title}</h4>
-                    <p>${event.time || 'All day'}</p>
-                </div>
-                <span class="event-type" style="background: ${typeColors[event.type]}">${event.type}</span>
-            </div>
-        `;
-    }).join('');
-}
-
-// ============================================
-// GOALS
-// ============================================
-
-document.getElementById('addGoalBtn')?.addEventListener('click', () => {
-    openModal('goalModal');
-});
-
-document.getElementById('goalProgress')?.addEventListener('input', (e) => {
-    document.getElementById('goalProgressValue').textContent = `${e.target.value}%`;
-});
-
-document.getElementById('saveGoalBtn')?.addEventListener('click', () => {
-    const title = document.getElementById('goalTitle').value.trim();
-    const date = document.getElementById('goalDate').value;
-    const progress = parseInt(document.getElementById('goalProgress').value);
-    
-    if (!title || !date) {
-        alert('Please fill in title and target date');
-        return;
-    }
-    
-    const goal = {
-        id: Date.now(),
-        title,
-        date,
-        progress,
-        createdAt: Date.now()
-    };
-    
-    data.goals.push(goal);
-    saveData('goals');
-    renderGoals();
-    closeModal(document.getElementById('goalModal'));
-    
-    // Reset form
-    document.getElementById('goalTitle').value = '';
-    document.getElementById('goalDate').value = '';
-    document.getElementById('goalProgress').value = 0;
-    document.getElementById('goalProgressValue').textContent = '0%';
-    
-    showNotification('Goal created successfully!');
-});
-
-function renderGoals() {
-    const list = document.getElementById('goalsList');
-    
-    if (data.goals.length === 0) {
-        list.innerHTML = `
-            <div class="empty-state">
-                <i class="fas fa-trophy"></i>
-                <p>No goals yet. Set your first goal!</p>
-            </div>
-        `;
-        return;
-    }
-    
-    list.innerHTML = data.goals.map(goal => `
-        <div class="goal-card">
-            <div class="goal-header">
-                <h3 class="goal-title">${goal.title}</h3>
-                <span class="goal-date">Target: ${new Date(goal.date).toLocaleDateString()}</span>
-            </div>
-            <div class="goal-progress-container">
-                <div class="goal-progress-bar">
-                    <div class="goal-progress-fill" style="width: ${goal.progress}%"></div>
-                </div>
-                <div class="goal-progress-text">${goal.progress}% Complete</div>
-            </div>
-            <div class="goal-actions">
-                <button class="btn-small secondary" onclick="updateGoalProgress(${goal.id})">
-                    Update Progress
-                </button>
-                <button class="btn-small secondary" onclick="deleteGoal(${goal.id})">
-                    <i class="fas fa-trash"></i>
-                </button>
-            </div>
-        </div>
-    `).join('');
-}
-
-function updateGoalProgress(id) {
-    const goal = data.goals.find(g => g.id === id);
-    if (goal) {
-        const newProgress = prompt(`Update progress for "${goal.title}"
-Current: ${goal.progress}%`, goal.progress);
-        
-        if (newProgress !== null) {
-            const progress = parseInt(newProgress);
-            if (progress >= 0 && progress <= 100) {
-                goal.progress = progress;
-                saveData('goals');
-                renderGoals();
-                
-                if (progress === 100) {
-                    showNotification('🎉 Congratulations! Goal completed!');
-                }
-            }
-        }
-    }
-}
-
-function deleteGoal(id) {
-    if (confirm('Are you sure you want to delete this goal?')) {
-        data.goals = data.goals.filter(g => g.id !== id);
-        saveData('goals');
-        renderGoals();
-    }
-}
-
-// ============================================
-// NOTIFICATIONS
-// ============================================
-
-function showNotification(message) {
-    // Create notification element
-    const notification = document.createElement('div');
-    notification.className = 'notification-toast';
-    notification.innerHTML = `
-        <i class="fas fa-check-circle"></i>
-        <span>${message}</span>
-    `;
-    
-    notification.style.cssText = `
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        background: white;
-        padding: 15px 20px;
-        border-radius: 10px;
-        box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-        display: flex;
-        align-items: center;
-        gap: 12px;
-        z-index: 10000;
-        animation: slideIn 0.3s ease;
-    `;
-    
-    document.body.appendChild(notification);
-    
-    setTimeout(() => {
-        notification.style.animation = 'slideOut 0.3s ease';
-        setTimeout(() => notification.remove(), 300);
-    }, 3000);
-}
-
-// Add animation styles
-const style = document.createElement('style');
-style.textContent = `
-    @keyframes slideIn {
-        from {
-            transform: translateX(400px);
-            opacity: 0;
-        }
-        to {
-            transform: translateX(0);
-            opacity: 1;
-        }
-    }
-    @keyframes slideOut {
-        from {
-            transform: translateX(0);
-            opacity: 1;
-        }
-        to {
-            transform: translateX(400px);
-            opacity: 0;
-        }
-    }
-`;
-document.head.appendChild(style);
-
-// ============================================
-// INITIALIZATION
-// ============================================
-
-document.addEventListener('DOMContentLoaded', () => {
-    // Load user name if available
-    const userName = localStorage.getItem('userName');
-    if (userName) {
-        document.getElementById('userName').textContent = userName;
-    }
-    
-    // Initialize all sections
-    renderSubjects();
-    renderTodos();
-    renderNotes();
-    renderGoals();
-    updateTimerDisplay();
-    updatePomodoroStats();
-    updateDashboard();
-    
-    // Add SVG gradient for timer
-    const svg = document.querySelector('.timer-ring');
-    const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-    defs.innerHTML = `
-        <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-            <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
-            <stop offset="100%" style="stop-color:#764ba2;stop-opacity:1" />
-        </linearGradient>
-    `;
-    svg.insertBefore(defs, svg.firstChild);
-    
-    console.log('Dashboard initialized successfully!');
-});
-
-// Make functions globally available
-window.deleteSubject = deleteSubject;
-window.logSession = logSession;
-window.toggleTodo = toggleTodo;
-window.deleteTodo = deleteTodo;
-window.editNote = editNote;
-window.deleteNote = deleteNote;
-window.updateGoalProgress = updateGoalProgress;
-window.deleteGoal = deleteGoal;
+/* ════════════════════
+   INIT
+════════════════════ */
+(function init(){
+  const name=localStorage.getItem('userName')||'Student';
+  $('userName').textContent=name;
+  $('userAvatar').textContent=name[0].toUpperCase();
+  renderSubjects();renderTodos();renderNotes();renderCalendar();renderGoals();
+  updatePomStats();updateTimer();updateDashboard();
+  $('eventDate').value=today();$('goalDate').value=today();
+  setTimeout(renderChart,50);
+})();
