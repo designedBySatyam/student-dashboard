@@ -1,7 +1,7 @@
 'use strict';
 
 /* ── Auth guard ── */
-if(localStorage.getItem('isLoggedIn')!=='true') window.location.replace('./index.html');
+if(localStorage.getItem('isLoggedIn')!=='true') window.location.replace('../index.html');
 
 /* ── Utils ── */
 const $=id=>document.getElementById(id);
@@ -61,14 +61,33 @@ document.querySelectorAll('.ni[data-s]').forEach(item=>{
 });
 
 $('logoutBtn').onclick=()=>{
-  if(confirm('Sign out?')){ localStorage.removeItem('isLoggedIn'); window.location.href='./index.html'; }
+  if(confirm('Sign out?')){ localStorage.removeItem('isLoggedIn'); window.location.href='../index.html'; }
 };
 
-/* ── Theme ── */
+/* ── Theme Toggle ── */
 const SUN=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>`;
 const MOON=`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>`;
-$('themeToggle').innerHTML=MOON;
-$('themeToggle').onclick=()=>{ renderChart(); };
+
+function applyTheme(theme){
+  document.documentElement.setAttribute('data-theme', theme);
+  localStorage.setItem('theme', theme);
+  const btn = $('themeToggle');
+  if(theme === 'light'){
+    btn.innerHTML = MOON + '<span class="theme-label">Dark</span>';
+  } else {
+    btn.innerHTML = SUN + '<span class="theme-label">Light</span>';
+  }
+  setTimeout(renderChart, 50);
+}
+
+// Init theme from storage
+const savedTheme = localStorage.getItem('theme') || 'dark';
+applyTheme(savedTheme);
+
+$('themeToggle').onclick = () => {
+  const current = document.documentElement.getAttribute('data-theme') || 'dark';
+  applyTheme(current === 'dark' ? 'light' : 'dark');
+};
 
 /* ════════════════════
    DASHBOARD
@@ -93,8 +112,8 @@ function calcStreak(){
 
 function renderActivity(){
   const items=[];
-  D.sSessions.slice(-3).forEach(s=>items.push({txt:`Studied ${s.subject} for ${s.duration} min`,t:s.date,ico:'📚',bg:'rgba(124,58,237,.15)'}));
-  D.todos.filter(t=>t.completed).slice(-2).forEach(t=>items.push({txt:`Completed: ${t.text}`,t:t.completedAt||Date.now(),ico:'✅',bg:'rgba(16,185,129,.15)'}));
+  D.sSessions.slice(-3).forEach(s=>items.push({txt:`Studied ${s.subject} for ${s.duration} min`,t:s.date,ico:'📚',bg:'rgba(200,16,46,0.14)'}));
+  D.todos.filter(t=>t.completed).slice(-2).forEach(t=>items.push({txt:`Completed: ${t.text}`,t:t.completedAt||Date.now(),ico:'✅',bg:'rgba(45,122,63,0.14)'}));
   items.sort((a,b)=>b.t-a.t);
   const el=$('activityList');
   if(!items.length){el.innerHTML=`<div class="empty"><span class="ei2">🕐</span><span class="et2">No recent activity</span></div>`;return;}
@@ -141,8 +160,10 @@ function renderChart(){
   const pad={l:36,r:16,t:14,b:34};
   const cW=W-pad.l-pad.r,cH=H-pad.t-pad.b;
   const bW=Math.min(36,cW/7-6),gap=(cW-bW*7)/6;
-  const gc='rgba(255,255,255,0.06)',lc='rgba(238,234,255,0.28)';
-  ctx.font=`11px 'Figtree',sans-serif`;ctx.textBaseline='middle';
+  const isDark = document.documentElement.getAttribute('data-theme') !== 'light';
+  const gc = isDark ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.07)';
+  const lc = isDark ? 'rgba(245,230,211,0.32)' : 'rgba(30,8,8,0.42)';
+  ctx.font=`11px 'Cinzel',serif`;ctx.textBaseline='middle';
   for(let i=0;i<=4;i++){
     const y=pad.t+(cH/4)*i,v=(1-i/4)*maxV;
     ctx.strokeStyle=gc;ctx.lineWidth=1;
@@ -150,8 +171,13 @@ function renderChart(){
     ctx.fillStyle=lc;ctx.textAlign='right';
     ctx.fillText(`${v>=1?v.toFixed(0):v.toFixed(1)}h`,pad.l-4,y);
   }
+  const isDarkMode = document.documentElement.getAttribute('data-theme') !== 'light';
   const gr=ctx.createLinearGradient(0,pad.t,0,H-pad.b);
-  gr.addColorStop(0,'#a78bfa');gr.addColorStop(0.5,'#7c3aed');gr.addColorStop(1,'#4338ca');
+  if(isDarkMode){
+    gr.addColorStop(0,'#ff4455');gr.addColorStop(0.45,'#c8102e');gr.addColorStop(1,'#7a0000');
+  } else {
+    gr.addColorStop(0,'#e8402a');gr.addColorStop(0.45,'#c8102e');gr.addColorStop(1,'#8b1a10');
+  }
   ctx.textAlign='center';
   vals.forEach((v,i)=>{
     const x=pad.l+i*(bW+gap),bH=(v/maxV)*cH,y=H-pad.b-bH,r=5;
@@ -425,7 +451,7 @@ function renderGoals(){
   if(!D.goals.length){el.innerHTML=`<div class="empty"><span class="ei2">🏆</span><span class="et2">No goals yet</span></div>`;return;}
   el.innerHTML=D.goals.map(g=>{
     const p=clamp(Number(g.progress)||0,0,100);
-    const col=p===100?'#10b981':p>=60?'#f59e0b':'#7c3aed';
+    const col=p===100?'#2d7a3f':p>=60?'#d4a017':'#c8102e';
     return `<div class="gc"><div class="gch"><div><div class="gct">${esc(g.title)}</div><div class="gcd">Target: ${g.date}</div></div><div style="font-family:'Syne',sans-serif;font-size:24px;font-weight:800;background:linear-gradient(135deg,${col},${col}aa);-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">${p}%</div></div><div class="gpl"><span>Progress</span><span>${p===100?'🎉 Complete':'In progress'}</span></div><div class="pb" style="height:8px"><div class="pf" style="width:${p}%;background:linear-gradient(90deg,${col},${col}aa)"></div></div><div class="gf"><button class="btn btn-o btn-sm" onclick="updateGoal(${g.id})">Update</button><button class="btn btn-o btn-sm" style="color:#f43f5e" onclick="delGoal(${g.id})">Delete</button></div></div>`;
   }).join('');
 }
@@ -439,6 +465,7 @@ window.delGoal=id=>{if(!confirm('Delete this goal?'))return;D.goals=D.goals.filt
   const name=localStorage.getItem('userName')||'Student';
   $('userName').textContent=name;
   $('userAvatar').textContent=name[0].toUpperCase();
+  if($('greetName'))$('greetName').textContent=name.split(' ')[0];
   renderSubjects();renderTodos();renderNotes();renderCalendar();renderGoals();
   updatePomStats();updateTimer();updateDashboard();
   $('eventDate').value=today();$('goalDate').value=today();

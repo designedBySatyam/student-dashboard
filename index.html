@@ -1,178 +1,155 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-<<<<<<< HEAD
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width,initial-scale=1.0" />
-    <title>StudyHub — Sign In</title>
-    <link rel="stylesheet" href="style.css" />
-=======
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sign In - Student Dashboard</title>
-    <link rel="stylesheet" href="style.css">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
->>>>>>> 4c752b713ff2a3f9874337f12be1dec1979ac81e
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width,initial-scale=1.0"/>
+  <title>StudyHub — Sign In</title>
+  <link rel="stylesheet" href="style.css"/>
 </head>
-
 <body>
 
-    <div class="bg">
-        <div class="blob b1"></div>
-        <div class="blob b2"></div>
-        <div class="blob b3"></div>
-        <div class="blob b4"></div>
+  <!-- Animated background -->
+  <div class="bg">
+    <div class="blob b1"></div>
+    <div class="blob b2"></div>
+    <div class="blob b3"></div>
+    <div class="blob b4"></div>
+  </div>
+
+  <div class="page">
+
+    <!-- LEFT PANEL -->
+    <div class="panel-art">
+      <div class="arc arc1"></div>
+      <div class="arc arc2"></div>
+      <div class="arc arc3"></div>
+
+      <div class="brand">
+        <div class="brand-mark">
+          <svg viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5zm0 7L2 14l10 5 10-5-10-5z"/></svg>
+        </div>
+        <span class="brand-name">StudyHub</span>
+      </div>
+
+      <div class="art-hero">
+        <div class="pill"><span class="pill-dot"></span> Your Academic OS</div>
+        <h1 class="h1">Master every<br>subject with<br><span class="shine">laser focus.</span></h1>
+        <p class="art-p">Track study hours, crush your to-do list, run deep-work sessions, and hit every goal — all in one beautifully designed workspace.</p>
+        <div class="features">
+          <div class="feat"><span class="feat-icon">📚</span> Study Tracker</div>
+          <div class="feat"><span class="feat-icon">⏱</span> Pomodoro</div>
+          <div class="feat"><span class="feat-icon">✅</span> Tasks</div>
+          <div class="feat"><span class="feat-icon">🏆</span> Goals</div>
+          <div class="feat"><span class="feat-icon">📅</span> Calendar</div>
+          <div class="feat"><span class="feat-icon">📝</span> Notes</div>
+        </div>
+      </div>
+
+      <div class="stats">
+        <div><span class="sv">12k+</span><span class="sl">Students</span></div>
+        <div><span class="sv">94%</span><span class="sl">Goal rate</span></div>
+        <div><span class="sv">3.8×</span><span class="sl">Productivity</span></div>
+      </div>
     </div>
 
-    <div class="page">
+    <!-- RIGHT PANEL -->
+    <div class="panel-form">
+      <div class="form-shell">
 
-        <!-- LEFT -->
-        <div class="panel-art">
-            <div class="arc arc1"></div>
-            <div class="arc arc2"></div>
-            <div class="arc arc3"></div>
-
-            <div class="brand">
-                <div class="brand-mark">
-                    <svg viewBox="0 0 24 24">
-                        <path d="M12 2L2 7l10 5 10-5-10-5zm0 7L2 14l10 5 10-5-10-5z" />
-                    </svg>
-                </div>
-                <span class="brand-name">StudyHub</span>
+        <!-- LOGIN -->
+        <div class="card" id="loginForm">
+          <span class="card-icon">👋</span>
+          <div class="card-title">Welcome back</div>
+          <div class="card-sub">Sign in to your workspace and pick up where you left off.</div>
+          <form id="loginEl" novalidate>
+            <div class="field">
+              <label>Email address</label>
+              <div class="iw"><span class="ii">✉️</span>
+                <input type="email" id="loginEmail" placeholder="you@university.edu" autocomplete="email"/>
+              </div>
             </div>
-
-            <div class="art-hero">
-                <div class="pill"><span class="pill-dot"></span> Your Academic OS</div>
-                <h1 class="h1">Master every<br>subject with<br><span class="shine">laser focus.</span></h1>
-                <p class="art-p">Track study hours, crush your to-do list, run deep-work sessions, and hit every goal —
-                    all in one beautifully designed workspace.</p>
-                <div class="features">
-                    <div class="feat"><span class="feat-icon">📚</span> Study Tracker</div>
-                    <div class="feat"><span class="feat-icon">⏱</span> Pomodoro Timer</div>
-                    <div class="feat"><span class="feat-icon">✅</span> Task Manager</div>
-                    <div class="feat"><span class="feat-icon">🏆</span> Goal Setting</div>
-                    <div class="feat"><span class="feat-icon">📅</span> Calendar</div>
-                    <div class="feat"><span class="feat-icon">📝</span> Quick Notes</div>
-                </div>
+            <div class="field">
+              <label>Password</label>
+              <div class="iw"><span class="ii">🔐</span>
+                <input type="password" id="loginPw" placeholder="••••••••" autocomplete="current-password"/>
+                <button type="button" class="eye" id="eyeLogin">👁</button>
+              </div>
             </div>
-
-            <div class="stats">
-                <div><span class="sv">12k+</span><span class="sl">Students</span></div>
-                <div><span class="sv">94%</span><span class="sl">Goal rate</span></div>
-                <div><span class="sv">3.8×</span><span class="sl">Productivity</span></div>
+            <div class="row-opt">
+              <label class="chk-lbl"><input type="checkbox" id="remember"/><span>Remember me</span></label>
+              <a href="#" class="lnk" id="toForgot">Forgot password?</a>
             </div>
+            <button type="submit" class="btn-main">Sign In →</button>
+          </form>
+          <div class="card-foot">New here? <a href="#" class="lnk" id="toSignup">Create a free account</a></div>
         </div>
 
-        <!-- RIGHT -->
-        <div class="panel-form">
-            <div class="form-shell">
-
-                <!-- LOGIN -->
-                <div class="card" id="loginForm">
-                    <div class="card-icon">👋</div>
-                    <div class="card-title">Welcome back</div>
-                    <div class="card-sub">Sign in to your workspace and pick up where you left off.</div>
-                    <form id="loginEl" novalidate>
-                        <div class="field">
-                            <label>Email address</label>
-                            <div class="iw"><span class="ii">✉️</span>
-                                <input type="email" id="loginEmail" placeholder="you@university.edu"
-                                    autocomplete="email" />
-                            </div>
-                        </div>
-                        <div class="field">
-                            <label>Password</label>
-                            <div class="iw"><span class="ii">🔐</span>
-                                <input type="password" id="loginPw" placeholder="••••••••"
-                                    autocomplete="current-password" />
-                                <button type="button" class="eye" id="eyeLogin">👁</button>
-                            </div>
-                        </div>
-                        <div class="row-opt">
-                            <label class="chk-lbl"><input type="checkbox" id="remember" /><span>Remember
-                                    me</span></label>
-                            <a href="#" class="lnk" id="toForgot">Forgot password?</a>
-                        </div>
-                        <button type="submit" class="btn-main">Sign In →</button>
-                    </form>
-                    <div class="card-foot">New here? <a href="#" class="lnk" id="toSignup">Create a free account</a>
-                    </div>
-                </div>
-
-                <!-- SIGNUP -->
-                <div class="card hidden" id="signupForm">
-                    <div class="card-icon">🚀</div>
-                    <div class="card-title">Create account</div>
-                    <div class="card-sub">Join thousands of students smashing their academic goals.</div>
-                    <form id="signupEl" novalidate>
-                        <div class="field">
-                            <label>Full name</label>
-                            <div class="iw"><span class="ii">👤</span>
-                                <input type="text" id="signupName" placeholder="Your full name" autocomplete="name" />
-                            </div>
-                        </div>
-                        <div class="field">
-                            <label>Email address</label>
-                            <div class="iw"><span class="ii">✉️</span>
-                                <input type="email" id="signupEmail" placeholder="you@university.edu"
-                                    autocomplete="email" />
-                            </div>
-                        </div>
-                        <div class="field">
-                            <label>Password</label>
-                            <div class="iw"><span class="ii">🔐</span>
-                                <input type="password" id="signupPw" placeholder="Min. 8 characters"
-                                    autocomplete="new-password" />
-                                <button type="button" class="eye" id="eyeSignup">👁</button>
-                            </div>
-                        </div>
-                        <div class="field">
-                            <label>Confirm password</label>
-                            <div class="iw"><span class="ii">🔐</span>
-                                <input type="password" id="signupCpw" placeholder="Repeat password"
-                                    autocomplete="new-password" />
-                                <button type="button" class="eye" id="eyeConfirm">👁</button>
-                            </div>
-                        </div>
-                        <div class="terms">
-                            <label class="chk-lbl"><input type="checkbox" id="terms" /><span>I agree to the <a href="#"
-                                        class="lnk">Terms &amp; Conditions</a></span></label>
-                        </div>
-                        <button type="submit" class="btn-main">Create Account →</button>
-                    </form>
-                    <div class="card-foot">Already have an account? <a href="#" class="lnk" id="toLogin">Sign in</a>
-                    </div>
-                </div>
-
-                <!-- FORGOT -->
-                <div class="card hidden" id="forgotForm">
-                    <div class="card-icon">🔑</div>
-                    <div class="card-title">Reset password</div>
-                    <div class="card-sub">Enter your email and we'll send you a reset link instantly.</div>
-                    <form id="forgotEl" novalidate>
-                        <div class="field">
-                            <label>Email address</label>
-                            <div class="iw"><span class="ii">✉️</span>
-                                <input type="email" id="resetEmail" placeholder="you@university.edu"
-                                    autocomplete="email" />
-                            </div>
-                        </div>
-                        <button type="submit" class="btn-main">Send Reset Link →</button>
-                    </form>
-                    <div class="card-foot"><a href="#" class="lnk" id="backLogin">← Back to sign in</a></div>
-                </div>
-
+        <!-- SIGNUP -->
+        <div class="card hidden" id="signupForm">
+          <span class="card-icon">🚀</span>
+          <div class="card-title">Create account</div>
+          <div class="card-sub">Join thousands of students smashing their academic goals.</div>
+          <form id="signupEl" novalidate>
+            <div class="field">
+              <label>Full name</label>
+              <div class="iw"><span class="ii">👤</span>
+                <input type="text" id="signupName" placeholder="Your full name" autocomplete="name"/>
+              </div>
             </div>
+            <div class="field">
+              <label>Email address</label>
+              <div class="iw"><span class="ii">✉️</span>
+                <input type="email" id="signupEmail" placeholder="you@university.edu" autocomplete="email"/>
+              </div>
+            </div>
+            <div class="field">
+              <label>Password</label>
+              <div class="iw"><span class="ii">🔐</span>
+                <input type="password" id="signupPw" placeholder="Min. 8 characters" autocomplete="new-password"/>
+                <button type="button" class="eye" id="eyeSignup">👁</button>
+              </div>
+            </div>
+            <div class="field">
+              <label>Confirm password</label>
+              <div class="iw"><span class="ii">🔐</span>
+                <input type="password" id="signupCpw" placeholder="Repeat password" autocomplete="new-password"/>
+                <button type="button" class="eye" id="eyeConfirm">👁</button>
+              </div>
+            </div>
+            <div class="terms">
+              <label class="chk-lbl"><input type="checkbox" id="terms"/><span>I agree to the <a href="#" class="lnk">Terms &amp; Conditions</a></span></label>
+            </div>
+            <button type="submit" class="btn-main">Create Account →</button>
+          </form>
+          <div class="card-foot">Already have an account? <a href="#" class="lnk" id="toLogin">Sign in</a></div>
         </div>
-    </div>
 
-    <div class="toast" id="toast" role="alert">
-        <div class="t-bar"></div>
-        <span id="toastMsg"></span>
-    </div>
+        <!-- FORGOT -->
+        <div class="card hidden" id="forgotForm">
+          <span class="card-icon">🔑</span>
+          <div class="card-title">Reset password</div>
+          <div class="card-sub">Enter your email and we'll send you a reset link instantly.</div>
+          <form id="forgotEl" novalidate>
+            <div class="field">
+              <label>Email address</label>
+              <div class="iw"><span class="ii">✉️</span>
+                <input type="email" id="resetEmail" placeholder="you@university.edu" autocomplete="email"/>
+              </div>
+            </div>
+            <button type="submit" class="btn-main">Send Reset Link →</button>
+          </form>
+          <div class="card-foot"><a href="#" class="lnk" id="backLogin">← Back to sign in</a></div>
+        </div>
 
-    <script src="script.js"></script>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast" role="alert">
+    <div class="t-bar"></div>
+    <span id="toastMsg"></span>
+  </div>
+
+  <script src="script.js"></script>
 </body>
-
 </html>
